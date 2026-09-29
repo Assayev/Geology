@@ -1,94 +1,100 @@
-import docx, copy, sys
-from docx.shared import Cm, Pt
+"""Ethics Certificate + VQD на бланке CGC (только английский)."""
+import docx, copy, os
+from docx.shared import Cm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-W='/tmp/claude-0/-home-user-Geology/af002989-109f-5670-bf4b-111a3c9940db/scratchpad/w/'
-ETH=W+'38c25f9e-Business_Ethics_Compliance_Certificate_Contractor_or_Suppliers_EN-RU.docx'
-VQD=W+'9eebeb7a-VQD_-_Vendor_Qualification_Undertaking_EN-RU_combined1.docx'
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+HERE=os.path.dirname(os.path.abspath(__file__))
+SRC='/root/.claude/uploads/af002989-109f-5670-bf4b-111a3c9940db/'
+ETH=SRC+'d293d741-Business_Ethics_Compliance_Certificate_Contractor_or_Suppliers_EN-RU.docx'
+VQD=SRC+'0a6563b3-VQD_-_Vendor_Qualification_Undertaking_EN-RU_combined1.docx'
+NAME='G. Zh. Shakhtayev'; TITLE='General Director'; COMPANY='Caspian Geology Center LLP'
+DATE='29 September 2026'; PLACE='Astana, Kazakhstan'
 
-def set_text(p, text):
-    rs=p.runs
-    rs[0].text=text
+def set_text(p,t):
+    rs=p.runs; rs[0].text=t
     for r in rs[1:]: r._r.getparent().remove(r._r)
-
-def replace_in_par(p, old, new):
+def rep(p,old,new):
     full=''.join(r.text for r in p.runs)
-    if old not in full: return False
-    # keep first-run formatting
-    set_text(p, full.replace(old,new)); return True
-
-def letterhead(doc, logo_w=Cm(3.6)):
+    if old in full: set_text(p,full.replace(old,new)); return True
+def nob(tbl):
+    b=OxmlElement('w:tblBorders')
+    for e in ('top','left','bottom','right','insideH','insideV'):
+        x=OxmlElement('w:'+e); x.set(qn('w:val'),'nil'); b.append(x)
+    tbl._tbl.tblPr.append(b)
+def letterhead(doc):
     for s in doc.sections:
         h=s.header; h.is_linked_to_previous=False
-        ps=h.paragraphs
-        for p in ps[1:]: p._p.getparent().remove(p._p)
-        p=ps[0]
-        for r in list(p.runs): r._r.getparent().remove(r._r)
-        p.alignment=WD_ALIGN_PARAGRAPH.RIGHT
-        p.add_run().add_picture('cgc_logo.png', width=logo_w)
-        s.top_margin=Cm(2.2); s.header_distance=Cm(1.0)
+        hp=h.paragraphs[0]
+        for p in h.paragraphs[1:]: p._p.getparent().remove(p._p)
+        for r in list(hp.runs): r._r.getparent().remove(r._r)
+        t=h.add_table(rows=1,cols=2,width=Cm(16.5)); nob(t); t.autofit=False
+        lay=OxmlElement('w:tblLayout'); lay.set(qn('w:type'),'fixed'); t._tbl.tblPr.append(lay)
+        for col,w in zip(t.columns,(5.2,11.3)): col.width=Cm(w)
+        for c,w in zip(t.rows[0].cells,(5.2,11.3)): c.width=Cm(w)
+        t.rows[0].cells[0].paragraphs[0].add_run().add_picture(os.path.join(HERE,'cgc_logo.png'),width=Cm(3.4))
+        c=t.rows[0].cells[1]
+        for i,l in enumerate(['17 Kabanbay batyr Str., Astana, Z05H0B4, Republic of Kazakhstan','Tel.: +7 (7172) 792570','E-mail: info@caspiangeo.com']):
+            p=c.paragraphs[0] if i==0 else c.add_paragraph()
+            r=p.add_run(l); r.font.size=Pt(9); r.font.color.rgb=RGBColor(0x1F,0x3A,0x5F); p.alignment=WD_ALIGN_PARAGRAPH.RIGHT
+        pPr=hp._p.get_or_add_pPr(); pb=OxmlElement('w:pBdr'); bt=OxmlElement('w:bottom')
+        for k,v in (('val','single'),('sz','8'),('color','1F3A5F'),('space','1')): bt.set(qn('w:'+k),v)
+        pb.append(bt); pPr.append(pb)
+        h._element.remove(hp._p); h._element.append(hp._p)   # линия под таблицей
+        s.top_margin=Cm(3.6); s.header_distance=Cm(0.8)
 
-def add_par_after(p, text='', bold=False):
-    new=copy.deepcopy(p._p); p._p.addnext(new)
-    np_=docx.text.paragraph.Paragraph(new,p._parent)
-    for r in list(np_.runs): r._r.getparent().remove(r._r)
-    if text: 
-        r=np_.add_run(text); r.bold=bold
-    return np_
-
-# ---------- Ethics certificate
-d=docx.Document(ETH)
-letterhead(d)
+# ---------- Ethics certificate (EN only)
+d=docx.Document(ETH); letterhead(d)
+body=d.element.body
+ru=[p for p in d.paragraphs if p.text.startswith('Русская версия')][0]
+el=ru._p
+while el is not None:                      # убрать русскую версию до sectPr
+    nx=el.getnext()
+    if not el.tag.endswith('sectPr'): body.remove(el)
+    el=nx
 for p in d.paragraphs:
-    replace_in_par(p,'[name], [office or title] of [Contractor]','G. Zh. Shakhtayev, Director of Caspian Geology Center LLP')
-    replace_in_par(p,'[Contractor] (the “Contractor”)','Caspian Geology Center LLP (the “Contractor”)')
-    replace_in_par(p,'[название], [офис или должность][Подрядчик]','Шахтаевым Г. Ж., Директором ТОО «Caspian Geology Center»')
+    rep(p,'[name], [office or title] of [Contractor]',f'{NAME}, {TITLE} of {COMPANY}')
+    rep(p,'[Contractor] (the “Contractor”)',f'{COMPANY} (the “Contractor”)')
     if p.text.startswith('Children, spouses'):
-        replace_in_par(p,' On behalf of [Contractor]','')
-        sig=p
-# signature block after "Date: ..." paragraph -> build before it
+        rep(p,' On behalf of [Contractor]','')
+        for br in p._p.findall('.//'+qn('w:br')): br.getparent().remove(br)
 datep=[p for p in d.paragraphs if p.text.startswith('Date:')][0]
-tbl=d.add_table(rows=4,cols=2)
-rows=[('On behalf of Caspian Geology Center LLP',''),
-      ('Signature:','…………………………………………'),
-      ('Name / Title:','G. Zh. Shakhtayev, Director'),
-      ('Stamp:','')]
+set_text(datep,f'Date: {DATE}')
+rows=[(f'On behalf of {COMPANY}',''),('Signature:','…………………………………………'),('Name:',NAME),('Title:',TITLE),('Stamp:','')]
+tbl=d.add_table(rows=len(rows),cols=2)
 for r,(a,b) in zip(tbl.rows,rows):
     r.cells[0].text=a; r.cells[1].text=b
     for c in r.cells:
         for pp in c.paragraphs:
-            pp.paragraph_format.space_after=Pt(6)
+            pp.paragraph_format.space_after=Pt(6); pp.paragraph_format.keep_with_next=True
             for rr in pp.runs: rr.font.size=Pt(11)
     r.cells[0].width=Cm(6); r.cells[1].width=Cm(10)
 for rr in tbl.rows[0].cells[0].paragraphs[0].runs: rr.bold=True
 datep._p.addprevious(tbl._tbl)
-for r in tbl.rows:
-    for c in r.cells:
-        for pp in c.paragraphs: pp.paragraph_format.keep_with_next=True
 datep.paragraph_format.keep_with_next=False
-# убрать пустые абзацы между текстом и блоком подписи
-prev=tbl._tbl.getprevious()
+prev=tbl._tbl.getprevious()                 # убрать пустые абзацы перед блоком подписи
 while prev is not None and prev.tag.endswith('}p') and not ''.join(prev.itertext()).strip():
     x=prev.getprevious(); prev.getparent().remove(prev); prev=x
-
-ru=[p for p in d.paragraphs if p.text.startswith('Русская версия')][0]
+# ужать пустые абзацы, чтобы текст и подпись уместились на одной странице
+for p in d.paragraphs:
+    if not p.text.strip() and not p._p.findall('.//'+qn('w:drawing')):
+        p.paragraph_format.space_after=Pt(0); p.paragraph_format.space_before=Pt(0)
+        for r in p.runs: r.font.size=Pt(4)
+        pPr=p._p.get_or_add_pPr(); rp=OxmlElement('w:rPr'); sz=OxmlElement('w:sz'); sz.set(qn('w:val'),'8'); rp.append(sz); pPr.append(rp)
+# пустые абзацы после Date
 nx=datep._p.getnext()
-while nx is not None and nx is not ru._p:
-    n2=nx.getnext()
-    if nx.tag.endswith('}p') and not ''.join(nx.itertext()).strip(): nx.getparent().remove(nx)
-    nx=n2
-ru.paragraph_format.page_break_before=True
-d.save('Business_Ethics_Compliance_Certificate_CGC.docx')
+while nx is not None and nx.tag.endswith('}p') and not ''.join(nx.itertext()).strip():
+    n2=nx.getnext(); nx.getparent().remove(nx); nx=n2
+d.save(os.path.join(HERE,'Business_Ethics_Compliance_Certificate_CGC_EN.docx'))
 
 # ---------- VQD
-d=docx.Document(VQD)
-letterhead(d)
+d=docx.Document(VQD); letterhead(d)
 t=d.tables[0]
 def cell(r,c,text):
-    ce=t.rows[r].cells[c]; ps=ce.paragraphs
-    if ps[0].runs: set_text(ps[0],text)
-    else: ps[0].add_run(text)
-cell(3,1,'G. Zh. Shakhtayev')
-t.rows[4].cells[0].paragraphs[0].add_run('Title:'); t.rows[4].cells[1].paragraphs[0].add_run('Director, Caspian Geology Center LLP')
-cell(6,1,'…………………………, Astana, Kazakhstan')
-cell(9,1,'[stamp]') if False else None
-d.save('Vendor_Qualification_Undertaking_CGC.docx')
+    ps=t.rows[r].cells[c].paragraphs
+    (set_text(ps[0],text) if ps[0].runs else ps[0].add_run(text))
+cell(3,1,NAME)
+t.rows[4].cells[0].paragraphs[0].add_run('Title:'); t.rows[4].cells[1].paragraphs[0].add_run(f'{TITLE}, {COMPANY}')
+cell(6,1,f'{DATE}, {PLACE}')
+cell(9,1,'M.P. / [stamp]')
+d.save(os.path.join(HERE,'Vendor_Qualification_Undertaking_CGC_EN.docx'))
