@@ -9,7 +9,7 @@ HERE=os.path.dirname(os.path.abspath(__file__))
 SRC='/root/.claude/uploads/af002989-109f-5670-bf4b-111a3c9940db/'
 ETH=SRC+'d293d741-Business_Ethics_Compliance_Certificate_Contractor_or_Suppliers_EN-RU.docx'
 VQD=SRC+'0a6563b3-VQD_-_Vendor_Qualification_Undertaking_EN-RU_combined1.docx'
-NAME='G. Zh. Shakhtayev'; TITLE='CEO'; COMPANY='Caspian Geology Center LLP'
+NAME='Gabit Zh. Shakhtayev'; TITLE='CEO'; COMPANY='Caspian Geology Center LLP'
 DATE='29 September 2026'; PLACE='Astana, Kazakhstan'
 
 def set_text(p,t):
