@@ -2,9 +2,11 @@
 
 Правки (только то, что утвердил заказчик правок):
   с.1        — титул заменён утверждённым образцом (logo Sarzha + CGC, Директор Шахтаев Г. Ж.)
-  с.2        — в оглавлении «Государственная лицензия 3 л.» -> «8 л.» (листов лицензий CGC)
+  с.2        — в оглавлении «Государственная лицензия 3 л.» -> «8 л.» (листов лицензий CGC),
+               «Техническое задание 7 л.» -> «8 л.»
   с.3        — «GeoProGlobal» -> «Caspian Geology Center» (2 места), лицензия GeoProGlobal
                № 20006797 -> лицензия CGC № 23006536; абзацы перебиты по ширине
+  с.28-34    — скан ТЗ (с инициалами и печатью субподрядчика) заменён ТЗ из Word без печатей (8 л.)
   с.36-38    — лицензия GeoProGlobal заменена лицензиями CGC (3 + 5 листов)
   с.3        — ТЗ «выданным ТОО «Sarzha Cargo Terminal»»; «директором –Тусупбаевым А.Е.» ->
                «директором –Шахтаевым Г.Ж.»
@@ -16,7 +18,7 @@
 import sys
 import pymupdf
 
-SRC, TITLE, LIC1, LIC2, OUT = sys.argv[1:6]
+SRC, TITLE, LIC1, LIC2, TZ, OUT = sys.argv[1:7]
 FONT = "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"  # метрика = Times New Roman
 F = pymupdf.Font(fontfile=FONT)
 CGC = "Caspian Geology Center"
@@ -113,6 +115,11 @@ print("с.3 абзацы:", n1, n2, n3, "строк")
 # ---- с.2: число листов лицензий в оглавлении ----------------------------------
 p2 = doc[1]
 tgt = [s for l, s in spans(p2) if s["text"].strip() == "3 л." and abs(s["origin"][1] - 378.4) < 1]
+assert len(tgt) == 1
+s = tgt[0]
+redact(p2, [mid(s["bbox"])])
+put(p2, s["origin"][0], s["origin"][1], "8 л.", s["size"])
+tgt = [s for l, s in spans(p2) if s["text"].strip() == "7 л." and abs(s["origin"][1] - 359.9) < 1]
 assert len(tgt) == 1
 s = tgt[0]
 redact(p2, [mid(s["bbox"])])
@@ -264,6 +271,12 @@ doc.insert_pdf(lic1, start_at=35)
 doc.insert_pdf(lic2, start_at=35 + lic1.page_count)
 shift = nlic - 3
 
+# ---- ТЗ: с.28-34 (скан) -> ТЗ из Word без печатей --------------------------------
+tz = pymupdf.open(TZ)
+doc.delete_pages(27, 33)                       # 0-based 27..33 = с.28-34
+doc.insert_pdf(tz, start_at=27)
+tz_shift = tz.page_count - 7
+
 # ---- титул ---------------------------------------------------------------------
 title = pymupdf.open(TITLE)
 doc.delete_page(0)
@@ -278,6 +291,8 @@ for lvl, text, pg, *rest in old_toc:
         text = "Лицензии ТОО «Caspian Geology Center»"
     if pg > 38:
         pg += shift
+    if pg > 34:
+        pg += tz_shift
     toc.append([lvl, text, pg])
 doc.set_toc(toc)
 meta = doc.metadata
