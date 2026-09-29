@@ -14,7 +14,8 @@ sp = lambda zz: re.search(r"<w:sectPr.*?</w:sectPr>", zz.read("word/document.xml
 same = re.sub(r'w:rsid\w*="[^"]*"', "", sp(ref)) == re.sub(r'w:rsid\w*="[^"]*"', "", sp(z)); ok &= same
 print(("OK  " if same else "DIFF"), "sectPr (page size, margins, header ref)")
 if len(sys.argv) > 2:
-    import fitz
+    try: import pymupdf as fitz
+    except ImportError: import fitz
     def blocks(p): return sorted((round(b[0]), round(b[1])) for b in fitz.open(p)[0].get_text("blocks") if b[1] < 125)
     r = blocks(os.path.join(A, "CGC_letterhead_reference.pdf")); d = blocks(sys.argv[2])
     hdr = [x for x in d if x in r or any(abs(x[0]-y[0]) <= 1 and abs(x[1]-y[1]) <= 1 for y in r)]
