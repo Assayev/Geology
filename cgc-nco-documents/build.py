@@ -1,5 +1,6 @@
 """Ethics Certificate + VQD на бланке CGC (только английский)."""
-import docx, copy, os
+import docx, copy, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from docx.shared import Cm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
@@ -23,25 +24,8 @@ def nob(tbl):
         x=OxmlElement('w:'+e); x.set(qn('w:val'),'nil'); b.append(x)
     tbl._tbl.tblPr.append(b)
 def letterhead(doc):
-    for s in doc.sections:
-        h=s.header; h.is_linked_to_previous=False
-        hp=h.paragraphs[0]
-        for p in h.paragraphs[1:]: p._p.getparent().remove(p._p)
-        for r in list(hp.runs): r._r.getparent().remove(r._r)
-        t=h.add_table(rows=1,cols=2,width=Cm(16.5)); nob(t); t.autofit=False
-        lay=OxmlElement('w:tblLayout'); lay.set(qn('w:type'),'fixed'); t._tbl.tblPr.append(lay)
-        for col,w in zip(t.columns,(5.2,11.3)): col.width=Cm(w)
-        for c,w in zip(t.rows[0].cells,(5.2,11.3)): c.width=Cm(w)
-        t.rows[0].cells[0].paragraphs[0].add_run().add_picture(os.path.join(HERE,'cgc_logo.png'),width=Cm(3.4))
-        c=t.rows[0].cells[1]
-        for i,l in enumerate(['17 Kabanbay batyr Str., Astana, Z05H0B4, Republic of Kazakhstan','Tel.: +7 (7172) 792570','E-mail: info@caspiangeo.com']):
-            p=c.paragraphs[0] if i==0 else c.add_paragraph()
-            r=p.add_run(l); r.font.size=Pt(9); r.font.color.rgb=RGBColor(0x1F,0x3A,0x5F); p.alignment=WD_ALIGN_PARAGRAPH.RIGHT
-        pPr=hp._p.get_or_add_pPr(); pb=OxmlElement('w:pBdr'); bt=OxmlElement('w:bottom')
-        for k,v in (('val','single'),('sz','8'),('color','1F3A5F'),('space','1')): bt.set(qn('w:'+k),v)
-        pb.append(bt); pPr.append(pb)
-        h._element.remove(hp._p); h._element.append(hp._p)   # линия под таблицей
-        s.top_margin=Cm(3.6); s.header_distance=Cm(0.8)
+    from cgc_letterhead import apply_letterhead
+    apply_letterhead(doc)
 
 # ---------- Ethics certificate (EN only)
 d=docx.Document(ETH); letterhead(d)
