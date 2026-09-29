@@ -6,8 +6,11 @@
   с.3        — «GeoProGlobal» -> «Caspian Geology Center» (2 места), лицензия GeoProGlobal
                № 20006797 -> лицензия CGC № 23006536; абзацы перебиты по ширине
   с.36-38    — лицензия GeoProGlobal заменена лицензиями CGC (3 + 5 листов)
+  с.3        — ТЗ «выданным ТОО «Sarzha Cargo Terminal»»; «директором –Тусупбаевым А.Е.» ->
+               «директором –Шахтаевым Г.Ж.»
   Чертежи 1,2— в штампе: исполнитель -> ТОО «Caspian Geology Center»,
-               Заказчик -> ТОО «Sarzha Cargo Terminal»
+               Заказчик -> ТОО «Sarzha Cargo Terminal»,
+               Директор Тусупбаев А. -> Шахтаев Г.Ж., подпись Тусупбаева убрана (клетка пустая)
   метаданные — заголовок «Геопроглобал» заменён, закладка «...GPG» переименована
 """
 import sys
@@ -98,11 +101,14 @@ n1 = retypeset(p3, 47.1, 5,
     "на территории Республики Казахстан, выдана Государственное учреждение «Управление "
     "контроля и качества городской среды города Астаны». Акимат города Астаны.", 14.04)
 n2 = retypeset(p3, 176.6, 4,
-    "В соответствии с техническим заданием, выданным ТОО «Caspian Geology Center», "
+    "В соответствии с техническим заданием, выданным ТОО «Sarzha Cargo Terminal», "
     "ТОО «" + CGC + "» были выполнены инженерные изыскания по объекту: "
     "«Многофункциональный морской терминал \"Саржа\". Универсальный терминал. "
     "Причал №10 с прилегающей площадкой».", 14.04)
-print("с.3 абзацы:", n1, n2, "строк")
+n3 = retypeset(p3, 656.4, 2,
+    "Текущий контроль методики, качества производства работ и соблюдения правил техники "
+    "безопасности осуществлялся директором –Шахтаевым Г.Ж.", 14.04)
+print("с.3 абзацы:", n1, n2, n3, "строк")
 
 # ---- с.2: число листов лицензий в оглавлении ----------------------------------
 p2 = doc[1]
@@ -148,6 +154,107 @@ for pno, cell in ((106, (1495.2, 1629.7)), (108, (1029.4, 1162.8)), (109, (1029.
     w = F.text_length(new, fontsize=size)
     put(page, cx - w / 2, g["origin"][1], new, size)
     print(f"с.{pno+1}: исполнитель {size:.2f} pt (было {g['size']:.2f}), ширина {w:.1f}/{avail:.1f}")
+
+# ---- директор в штампах: Тусупбаев А. -> Шахтаев Г.Ж., его подпись убрать -----
+from collections import Counter
+
+DIRECTOR = "Шахтаев Г.Ж."
+SANS = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+FS = pymupdf.Font(fontfile=SANS)
+
+
+def _col(pth):
+    return tuple(round(c, 2) for c in (pth.get("color") or ()))
+
+
+def _sig(pth):
+    r = pth["rect"]
+    return (_col(pth), round(r.x0, 1), round(r.y0, 1), round(r.x1, 1), round(r.y1, 1))
+
+
+def remove_paths(page, pred):
+    """Удалить векторные пути, для которых pred(path) истинно (несколько проходов
+    с растущим запасом — у острых углов линии выступают за bbox)."""
+    total = [0, 0]
+    for m in (1.2, 3.0, 6.0, None):          # None — вырожденные штрихи: удаление касанием
+        n, miss, still = _remove_paths_once(page, pred, m)
+        total[0] += n; total[1] += miss
+        if not still:
+            break
+    return total[0], total[1], still
+
+
+def _remove_paths_once(page, pred, margin):
+    """Один проход. Пути, задетые случайно (не подходящие под pred), перерисовываются как были."""
+    before = page.get_drawings()
+    targets = [q for q in before if pred(q)]
+    keep = [q for q in before if not pred(q)]
+    if not targets:
+        return 0, 0, 0
+    for t in targets:
+        if margin is None:                   # точка в середине первого отрезка пути
+            it = t["items"][0]
+            a, b = it[1], it[-1]
+            c = pymupdf.Point((a.x + b.x) / 2, (a.y + b.y) / 2)
+            page.add_redact_annot(pymupdf.Rect(c.x - 0.1, c.y - 0.1, c.x + 0.1, c.y + 0.1), fill=False)
+        else:
+            page.add_redact_annot(t["rect"] + (-margin, -margin, margin, margin), fill=False)
+    page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
+                          graphics=(pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_TOUCHED if margin is None
+                                    else pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED),
+                          text=pymupdf.PDF_REDACT_TEXT_NONE)
+    left = Counter(_sig(q) for q in page.get_drawings())
+    missing = []
+    for q in keep:
+        k = _sig(q)
+        if left[k]:
+            left[k] -= 1
+        else:
+            missing.append(q)
+    for q in missing:                                   # вернуть задетое
+        sh = page.new_shape()
+        for it in q["items"]:
+            if it[0] == "l":
+                sh.draw_line(it[1], it[2])
+            elif it[0] == "c":
+                sh.draw_bezier(it[1], it[2], it[3], it[4])
+            elif it[0] == "re":
+                sh.draw_rect(it[1])
+            elif it[0] == "qu":
+                sh.draw_quad(it[1])
+        sh.finish(color=q.get("color"), fill=q.get("fill"), width=q.get("width") or 1,
+                  closePath=q.get("closePath", False))
+        sh.commit()
+    still = [q for q in page.get_drawings() if pred(q)]
+    return len(targets), len(missing), len(still)
+
+
+# Чертёж 1 (с.107): фамилия — текст Times с наклоном (Tm 1 0 0.2126 1, Tz 91.02 %, 166.09*0.06 pt)
+page = doc[106]
+sp = [s for l, s in spans(page) if s["text"].strip() == "Тусупбаев А."]
+assert len(sp) == 1
+sp = sp[0]
+row1 = pymupdf.Rect(1245, 1064, 1285, 1084)               # клетка «Подп.» строки «Директор»
+redact(page, [mid(sp["bbox"])])
+res = remove_paths(page, lambda q: _col(q) == (0.0, 0.0, 1.0) and row1.contains(q["rect"]))
+o = pymupdf.Point(sp["origin"])
+page.insert_text(o, DIRECTOR, fontname="LibSerif", fontfile=FONT, fontsize=166.0932 * 0.06,
+                 morph=(o, pymupdf.Matrix(0.910233, 0, 0.2126, 1, 0, 0)))
+print("с.107 директор: подпись удалена/перерисовано/осталось", res)
+
+# Чертёж 2 (с.109-111): фамилия нарисована линиями шрифта AutoCAD
+NAME2 = pymupdf.Rect(723, 1524, 780, 1534.8)              # клетка фамилии строки «Директор»
+SIGN2 = pymupdf.Rect(784, 1519, 824, 1537.5)              # клетка «Подп.» строки «Директор»
+for pno in (108, 109, 110):
+    page = doc[pno]
+    g = remove_paths(page, lambda q: _col(q) == (0.0, 0.0, 0.0) and NAME2.contains(q["rect"]))
+    sg = remove_paths(page, lambda q: _col(q) == (0.0, 0.0, 1.0) and SIGN2.contains(q["rect"]))
+    size = 6.7 / 0.716                                     # высота прописных как у соседних фамилий
+    sx = min(1.0, (782.8 - 2 - 726.1) / FS.text_length(DIRECTOR, fontsize=size))
+    o = pymupdf.Point(726.1, 1531.8)
+    page.insert_text(o, DIRECTOR, fontname="LibSans", fontfile=SANS, fontsize=size,
+                     morph=(o, pymupdf.Matrix(sx, 0, 0, 1, 0, 0)))
+    print(f"с.{pno+1} директор: буквы {g}, подпись {sg}, сжатие {sx:.2f}")
 
 # ---- лицензии: с.36-38 -> лицензии CGC ----------------------------------------
 lic1, lic2 = pymupdf.open(LIC1), pymupdf.open(LIC2)
